@@ -1,0 +1,10 @@
+{
+  "name": "endgame-study",
+  "version": "0.1.0",
+  "description": "A free, unlimited Chess.com-style game review tool, running entirely in your browser.",
+  "type": "module",
+  "scripts": {
+    "dev": "npx --yes serve . -l 5173"
+  },
+  "license": "MIT"
+}
