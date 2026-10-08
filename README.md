@@ -23,8 +23,23 @@ npm run dev
 
 Then open the URL it prints (defaults to `http://localhost:5173`).
 
-No build step, no bundler, no framework — this intentionally stays plain
+No build step, no bundler, no framework: this intentionally stays plain
 HTML/CSS/JS with native ES modules while the project is still small.
+
+## Running the tests
+
+```
+npm install
+npm test            # run the suite once
+npm run test:watch  # re-run automatically whenever a file changes
+```
+
+Tests live in `test/` and use [Vitest](https://vitest.dev). They cover the
+pure logic in `src/analysis.js`: move classification thresholds (including
+the exact boundary values), the win-percentage and accuracy formulas, game
+phase detection, and the hanging-piece and sacrifice heuristics on small
+hand-built chess positions. `test/setup.js` provides the global `Chess`
+object that the browser normally gets from a script tag.
 
 ## Project structure
 
@@ -61,7 +76,7 @@ tool. Current state and roadmap:
 
 - [x] Plain JS split into modules with a clear dependency graph
 - [x] Real dev workflow (local server instead of double-clicking a file)
-- [ ] Unit tests on `analysis.js` (Vitest) — next up
+- [x] Unit tests on `analysis.js` (Vitest)
 - [ ] TypeScript conversion
 - [ ] Backend (Node/Express + SQLite or Postgres) so review history survives
       a cleared browser and works across devices
