@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Endgame Study — Unlimited Game Review</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,400;8..60,600;8..60,700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="shell">
+
+  <div class="masthead">
+    <div>
+      <h1>Endgame <span>Study</span></h1>
+      <p>Your own unlimited game review — no daily cap, runs entirely on your machine.</p>
+    </div>
+    <div class="tabs">
+      <button id="tabReviewBtn" class="active">Review</button>
+      <button id="tabPatternsBtn">Patterns</button>
+    </div>
+  </div>
+
+  <!-- ================= REVIEW TAB ================= -->
+  <div id="tabReview">
+
+    <div class="panel" id="importPanel">
+      <h2>Bring in a game</h2>
+      <div class="import-modes">
+        <button id="modeFetchBtn" class="active">Fetch from Chess.com</button>
+        <button id="modePasteBtn">Paste a PGN</button>
+      </div>
+
+      <div id="modeFetch">
+        <div class="import-row">
+          <div class="field">
+            <label for="usernameInput">Chess.com username</label>
+            <input type="text" id="usernameInput" placeholder="e.g. hikaru">
+          </div>
+          <div class="field">
+            <label for="gameCountInput">How many recent games</label>
+            <input type="number" id="gameCountInput" value="15" min="1" max="60" style="width:90px;">
+          </div>
+          <button class="primary" id="fetchGamesBtn">Fetch games</button>
+        </div>
+        <p class="hint">Pulls your most recent games straight from Chess.com's public API. There's no "fetch by game number" endpoint Chess.com exposes publicly, so pick the game from the list below — or paste its PGN directly if you have it copied from the game page.</p>
+        <div id="fetchStatus" class="hint"></div>
+        <div class="games-list" id="gamesList"></div>
+      </div>
+
+      <div id="modePaste" class="hidden">
+        <div class="field" style="margin-bottom:10px;">
+          <label for="pasteUsername">Your Chess.com/Lichess username (optional — helps orient the board)</label>
+          <input type="text" id="pasteUsername" placeholder="e.g. hikaru">
+        </div>
+        <textarea id="pgnPaste" placeholder="Paste full PGN here, including the [White &quot;...&quot;] / [Black &quot;...&quot;] headers if you have them."></textarea>
+        <div style="margin-top:10px;">
+          <button class="primary" id="loadPgnBtn">Load PGN</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel hidden" id="analyzePanel">
+      <h2>Analysis</h2>
+      <div class="speed-row">
+        <span style="font-size:13px;color:var(--ink-dim);">Search time per move</span>
+        <select id="speedSelect">
+          <option value="250">Quick (~250ms/move)</option>
+          <option value="600" selected>Balanced (~600ms/move)</option>
+          <option value="1200">Deep (~1.2s/move, slower)</option>
+        </select>
+        <button class="primary" id="analyzeBtn">Analyze this game</button>
+      </div>
+      <div class="progress-wrap" id="progressWrap">
+        <div class="progress-track"><div class="progress-fill" id="progressFill"></div></div>
+        <div class="progress-label" id="progressLabel">0 / 0</div>
+      </div>
+      <div class="summary-row hidden" id="summaryRow"></div>
+    </div>
+
+    <div class="panel hidden" id="boardPanel">
+      <div class="review-grid">
+        <div class="board-wrap">
+          <div class="board" id="board"></div>
+          <div class="board-controls">
+            <button id="btnFirst">⏮</button>
+            <button id="btnPrev">◀</button>
+            <span class="move-badge" id="plyBadge">start</span>
+            <button id="btnNext">▶</button>
+            <button id="btnLast">⏭</button>
+          </div>
+          <div class="turn-badge" id="turnBadge"></div>
+        </div>
+        <div>
+          <div class="movelist" id="moveList"></div>
+          <div class="explain-box" id="explainBox">
+            <div class="explain-head">
+              <span class="explain-move" id="explainMove">Starting position</span>
+            </div>
+            <div class="explain-text" id="explainText">Step through the game to see how each move was judged.</div>
+            <div class="best-line" id="bestLine"></div>
+          </div>
+          <div class="eval-wrap">
+            <canvas id="evalChart" width="640" height="140"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ================= PATTERNS TAB ================= -->
+  <div id="tabPatterns" class="hidden">
+    <div class="panel">
+      <h2>Your recurring patterns</h2>
+      <div id="patternsEmpty" class="empty-state">Analyze a few games and this fills in with the mistakes you make most often.</div>
+      <div id="patternsBody" class="hidden">
+        <div class="stat-grid" id="statGrid"></div>
+        <div class="insight-box" id="insightBox"></div>
+      </div>
+    </div>
+    <div class="panel hidden" id="phasePanel">
+      <h2>Where the losses happen</h2>
+      <div class="bar-chart" id="phaseChart"></div>
+    </div>
+    <div class="panel hidden" id="piecePanel">
+      <h2>Which pieces get you in trouble</h2>
+      <div class="bar-chart" id="pieceChart"></div>
+    </div>
+    <div class="panel hidden" id="trendPanel">
+      <h2>Accuracy over time</h2>
+      <canvas id="trendChart" width="900" height="150" style="width:100%;height:150px;border:1px solid var(--line);border-radius:8px;background:var(--bg-2);"></canvas>
+    </div>
+    <div class="panel hidden" id="historyPanel">
+      <h2>Reviewed games</h2>
+      <div class="games-list" id="historyList"></div>
+      <div style="margin-top:14px;"><button id="clearHistoryBtn">Clear saved history</button></div>
+    </div>
+  </div>
+
+  <div class="small-note">
+    Move judgments come from a local Stockfish (ASM-JS build) search at the depth/time you choose above — a few hundred milliseconds per position is far shallower than the multi-second server-side analysis chess sites use, so treat classifications as a strong guide rather than gospel, especially near the "inaccuracy / good" boundary. The "hanging piece" and "brilliant" notes are simple heuristics, not full tactical-motif recognition. Everything runs locally in your browser; your games and history are stored only in this browser's local storage and are never sent anywhere except the initial fetch to Chess.com's public API.
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
+<script type="module" src="src/app.js"></script>
+</body>
+</html>
