@@ -125,7 +125,7 @@ textarea{font-family:var(--mono);resize:vertical;}
 .board-wrap{display:flex;flex-direction:column;align-items:center;gap:12px;}
 .board{
   width:100%;aspect-ratio:1;max-width:380px;
-  display:grid;grid-template-columns:repeat(8,1fr);grid-template-rows:repeat(8,1fr);
+  display:grid;grid-template-columns:repeat(8,minmax(0,1fr));grid-template-rows:repeat(8,minmax(0,1fr));
   border:2px solid var(--line);border-radius:6px;overflow:hidden;
 }
 .sq{display:flex;align-items:center;justify-content:center;font-size:min(6vw,34px);position:relative;user-select:none;}
@@ -171,6 +171,8 @@ textarea{font-family:var(--mono);resize:vertical;}
 .explain-move{font-family:var(--mono);font-size:15px;font-weight:600;}
 .explain-text{color:var(--ink-dim);font-size:13.5px;line-height:1.55;}
 .explain-text b{color:var(--ink);}
+.explain-reasons{margin:8px 0 0;padding-left:18px;}
+.explain-reasons li{margin:4px 0;}
 .best-line{font-family:var(--mono);font-size:12.5px;color:var(--ink-faint);margin-top:6px;}
 
 .eval-wrap{margin-top:14px;}

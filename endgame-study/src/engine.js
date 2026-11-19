@@ -34,15 +34,23 @@ export class Engine {
     } else if (this._pending) {
       if (line.startsWith("info")) {
         const scoreMatch = line.match(/score (cp|mate) (-?\d+)/);
-        const pvMatch = line.match(/\spv\s(\S+)/);
+        // "pv" is the principal variation: the whole line of moves the engine
+        // expects, best play for both sides. It's always the last field.
+        const pvMatch = line.match(/\spv\s(.+)$/);
         if (scoreMatch) {
           this._pending.lastScoreType = scoreMatch[1];
           this._pending.lastScoreVal = parseInt(scoreMatch[2], 10);
         }
-        if (pvMatch) this._pending.lastBestUci = pvMatch[1];
+        if (pvMatch) {
+          this._pending.lastPv = pvMatch[1].trim().split(/\s+/);
+          this._pending.lastBestUci = this._pending.lastPv[0];
+        }
       } else if (line.startsWith("bestmove")) {
         const parts = line.split(" ");
         const bestUci = parts[1] && parts[1] !== "(none)" ? parts[1] : (this._pending.lastBestUci || null);
+        // Keep the PV only if it starts with the move the engine settled on.
+        const lastPv = this._pending.lastPv || [];
+        const pv = bestUci && lastPv[0] === bestUci ? lastPv : (bestUci ? [bestUci] : []);
         const result = {
           cpEquiv: this._pending.lastScoreType === "mate"
             ? (this._pending.lastScoreVal >= 0
@@ -52,6 +60,7 @@ export class Engine {
           isMate: this._pending.lastScoreType === "mate",
           mateIn: this._pending.lastScoreType === "mate" ? this._pending.lastScoreVal : null,
           bestUci,
+          pv,
         };
         const resolve = this._pending.resolve;
         this._pending = null;
@@ -65,12 +74,16 @@ export class Engine {
     return new Promise((res) => this._readyResolvers.push(res));
   }
 
-  async analyze(fen, movetimeMs) {
+  // searchMoves (optional): only consider these UCI moves. Used to ask
+  // "what's the best move other than this one?". UCI needs searchmoves to
+  // come last on the go line, since it takes everything after it.
+  async analyze(fen, movetimeMs, searchMoves = null) {
     await this.whenReady();
     return new Promise((resolve) => {
-      this._pending = { resolve, lastScoreType: null, lastScoreVal: 0, lastBestUci: null };
+      this._pending = { resolve, lastScoreType: null, lastScoreVal: 0, lastBestUci: null, lastPv: null };
       this.worker.postMessage("position fen " + fen);
-      this.worker.postMessage("go movetime " + movetimeMs);
+      const restrict = searchMoves && searchMoves.length ? " searchmoves " + searchMoves.join(" ") : "";
+      this.worker.postMessage("go movetime " + movetimeMs + restrict);
     });
   }
 }
