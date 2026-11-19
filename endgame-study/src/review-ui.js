@@ -50,21 +50,25 @@ export function renderExplain() {
   const tag = `<span class="classify-tag tag-${a.classification}">${TAG_LABEL[a.classification]}</span>`;
   moveEl.innerHTML = `${Math.ceil(state.currentPly / 2)}${a.color === "w" ? "." : "..."} ${a.san} ${tag}`;
 
-  let msg = "";
-  if (a.classification === "brilliant") {
-    msg = `A striking move — it gives up material but the engine still likes your position afterwards. That's the kind of sacrifice worth remembering.`;
-  } else if (a.classification === "best") {
-    msg = `The engine's top choice here. Lost roughly ${(a.cpLoss / 100).toFixed(2)} pawns of evaluation, essentially nothing.`;
-  } else if (a.classification === "excellent" || a.classification === "good") {
-    msg = `A solid move, close to the engine's preference (${(a.cpLoss / 100).toFixed(2)} pawns behind the top line).`;
+  const pawns = (a.cpLoss / 100).toFixed(2);
+  let verdict;
+  if (a.classification === "brilliant") verdict = "A brilliant sacrifice: giving up the piece is what turns the game.";
+  else if (a.classification === "best") verdict = "The engine's top choice.";
+  else if (a.classification === "excellent" || a.classification === "good") verdict = `Close to the engine's top choice (${pawns} pawns behind it).`;
+  else verdict = `This cost about <b>${pawns} pawns</b> of evaluation.`;
+
+  if (a.reasons && a.reasons.length) {
+    // Newer analyses: the verdict plus the reasons explain.js worked out.
+    textEl.innerHTML = verdict + `<ul class="explain-reasons">${a.reasons.map((r) => `<li>${r}</li>`).join("")}</ul>`;
   } else {
-    msg = `This move cost about <b>${(a.cpLoss / 100).toFixed(2)} pawns</b> of evaluation` +
-      (a.bestSan ? ` compared to <b>${a.bestSan}</b>` : "") + ".";
+    // Fallback for analyses made before explain.js existed.
+    let msg = verdict;
+    if (a.bestSan && !["best", "brilliant"].includes(a.classification)) msg += ` The engine preferred <b>${a.bestSan}</b>.`;
     if (a.missedMate) msg += ` The engine had a forced checkmate here and this move let it slip.`;
-    if (a.hanging) msg += ` It also looks like it leaves your <b>${pieceName(a.hanging.piece)}</b> on <b>${a.hanging.square}</b> hanging — the opponent can win it back with nothing in return.`;
+    if (a.hanging) msg += ` It also seems to leave the <b>${pieceName(a.hanging.piece)}</b> on <b>${a.hanging.square}</b> hanging.`;
+    textEl.innerHTML = msg;
   }
-  textEl.innerHTML = msg;
-  bestEl.textContent = a.bestSan ? "Engine preferred: " + a.bestSan : "";
+  bestEl.textContent = a.bestSan ? "Engine line: " + (a.bestLine || a.bestSan) : "";
 }
 
 export function renderEvalChart() {
@@ -77,25 +81,34 @@ export function renderEvalChart() {
   const n = state.currentAnalysis.length;
   const clamp = (v) => Math.max(-900, Math.min(900, v));
   const mid = h / 2;
-  ctx.strokeStyle = "#3A4438"; ctx.lineWidth = 2;
+  const yOf = (i) => mid - (clamp(state.currentAnalysis[i].whiteEval) / 900) * (mid - 8);
+  const xOf = (i) => (i / (n - 1 || 1)) * w;
+
+  // Black's share: the whole chart starts dark.
+  ctx.fillStyle = "#1E1F1C";
+  ctx.fillRect(0, 0, w, h);
+
+  // White's share: fill from the bottom edge up to the eval line, starting
+  // level (0.00) at the left. The higher the line, the more of the chart is
+  // white, so whoever is winning owns more of the area.
+  ctx.beginPath();
+  ctx.moveTo(0, h);
+  ctx.lineTo(0, mid);
+  for (let i = 0; i < n; i++) ctx.lineTo(xOf(i), yOf(i));
+  ctx.lineTo(w, h);
+  ctx.closePath();
+  ctx.fillStyle = "#ECE6D6";
+  ctx.fill();
+
+  // 0.00 reference line on top of both colors.
+  ctx.strokeStyle = "rgba(128,128,120,.55)"; ctx.lineWidth = 2;
   ctx.beginPath(); ctx.moveTo(0, mid); ctx.lineTo(w, mid); ctx.stroke();
+
+  // Eval line: grey so it reads against both the light and dark areas.
   ctx.beginPath();
   ctx.moveTo(0, mid);
-  for (let i = 0; i < n; i++) {
-    const x = (i / (n - 1 || 1)) * w;
-    const v = clamp(state.currentAnalysis[i].whiteEval);
-    ctx.lineTo(x, mid - (v / 900) * (mid - 8));
-  }
-  ctx.lineTo(w, mid); ctx.closePath();
-  ctx.fillStyle = "rgba(241,231,208,.10)"; ctx.fill();
-  ctx.beginPath();
-  for (let i = 0; i < n; i++) {
-    const x = (i / (n - 1 || 1)) * w;
-    const v = clamp(state.currentAnalysis[i].whiteEval);
-    const y = mid - (v / 900) * (mid - 8);
-    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-  }
-  ctx.strokeStyle = "#DCD3B9"; ctx.lineWidth = 3; ctx.stroke();
+  for (let i = 0; i < n; i++) ctx.lineTo(xOf(i), yOf(i));
+  ctx.strokeStyle = "#8C8A80"; ctx.lineWidth = 2; ctx.stroke();
   for (let i = 0; i < n; i++) {
     const cls = state.currentAnalysis[i].classification;
     if (cls === "blunder" || cls === "mistake" || cls === "brilliant") {

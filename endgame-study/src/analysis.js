@@ -69,17 +69,70 @@ export function detectHanging(fenAfter) {
   return worst;
 }
 
-// Rough "is this a sacrifice that still holds together" heuristic, used to
-// upgrade a Best move to Brilliant. Deliberately conservative.
-export function detectSacrifice(mv, fenAfter, moverEvalAfter) {
-  const movedVal = PIECE_VAL[mv.piece] || 0;
-  if (movedVal < 3) return false;
-  const c = new Chess(fenAfter);
-  const oppCaptures = c.moves({ verbose: true }).filter(m =>
-    (m.flags.includes("c") || m.flags.includes("e")) && m.to === mv.to);
-  if (oppCaptures.length === 0) return false;
-  if (movedVal < 2) return false;
-  return moverEvalAfter >= -60;
+// Pieces of `victim` (knight or bigger) that the other side could win right
+// now if it were their turn: either undefended, or attacked by something
+// cheaper. When it isn't actually the attacker's turn we flip the side to
+// move — a "what if they could move again" check, standard for spotting threats.
+export function threatsAgainst(fen, victim) {
+  const attacker = victim === "w" ? "b" : "w";
+  const parts = fen.split(" ");
+  if (parts[1] !== attacker) { parts[1] = attacker; parts[3] = "-"; }
+  const base = parts.join(" ");
+  const c = new Chess();
+  if (!c.load(base)) return [];
+  const found = new Map();
+  for (const m of c.moves({ verbose: true })) {
+    if (!m.captured || m.captured === "k") continue;
+    const val = PIECE_VAL[m.captured] || 0;
+    if (val < 3) continue;
+    const c2 = new Chess();
+    c2.load(base);
+    c2.move({ from: m.from, to: m.to, promotion: m.promotion });
+    const defended = c2.moves({ verbose: true }).some((r) => r.to === m.to && r.captured);
+    const gain = defended ? val - (PIECE_VAL[m.piece] || 0) : val;
+    if (gain <= 0) continue;
+    const prev = found.get(m.to);
+    if (!prev || gain > prev.gain) {
+      found.set(m.to, { square: m.to, piece: m.captured, by: m.piece, from: m.from, gain });
+    }
+  }
+  return [...found.values()];
+}
+
+// Is this move a real piece sacrifice? After the move (fenAfter, opponent to
+// move), the opponent must be able to win a knight-or-bigger outright, for
+// more than the mover just captured. That rules out even trades (a defended
+// piece taken by an equal piece) and ordinary recaptures.
+// Returns the piece being offered ({ square, piece, gain, ... }) or null.
+export function detectSacrifice(mv, fenAfter) {
+  const mover = fenAfter.split(" ")[1] === "w" ? "b" : "w";
+  const justWon = PIECE_VAL[mv.captured] || 0;
+  let offered = null;
+  for (const t of threatsAgainst(fenAfter, mover)) {
+    if (t.gain > justWon && (!offered || t.gain > offered.gain)) offered = t;
+  }
+  return offered;
+}
+
+// Brilliant = a sound piece sacrifice that changes the outcome compared with
+// the best NON-sacrificing move:
+//   "equalizes": every other move leaves the mover losing; the sac holds level
+//   "wins":      every other move keeps it about even; the sac is winning
+// Evals are centipawns from the mover's point of view (100 = one pawn).
+// Tune these numbers to make Brilliant rarer or more common.
+export const BRILLIANT = {
+  MAX_CP_LOSS: 20,   // the sac itself must be (near-)best
+  LOSING: -150,      // alternative at or below this = losing
+  EQUALIZED: -50,    // sac at or above this = back to level
+  EVEN_HIGH: 100,    // alternative between LOSING and this = "about even"
+  WINNING: 200,      // sac at or above this = winning
+};
+
+export function brilliantKind({ cpLoss, altEval, sacEval }) {
+  if (altEval == null || cpLoss > BRILLIANT.MAX_CP_LOSS) return null;
+  if (altEval <= BRILLIANT.LOSING && sacEval >= BRILLIANT.EQUALIZED) return "equalizes";
+  if (altEval > BRILLIANT.LOSING && altEval <= BRILLIANT.EVEN_HIGH && sacEval >= BRILLIANT.WINNING) return "wins";
+  return null;
 }
 
 export function winPercent(cp) {

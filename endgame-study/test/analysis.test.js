@@ -20,6 +20,8 @@ import {
   uciToSan,
   detectHanging,
   detectSacrifice,
+  brilliantKind,
+  BRILLIANT,
   winPercent,
   moveAccuracy,
   classify,
@@ -279,36 +281,79 @@ describe("detectHanging", () => {
 
 /* ------------------------------------------------------------------ */
 describe("detectSacrifice", () => {
-  // detectSacrifice(mv, fenAfter, moverEvalAfter) is used to upgrade a
-  // 'best' move to 'brilliant'. mv needs .piece and .to; fenAfter has the
-  // opponent to move; moverEvalAfter is the mover's evaluation in cp.
+  // detectSacrifice(mv, fenAfter) asks: after this move, can the opponent
+  // win a knight-or-bigger outright, for more than the mover just took?
+  // It returns the offered piece, or null. fenAfter has the opponent to move.
 
-  const knightOnE5 = { piece: "n", to: "e5" };
-  const attackedKnightFen = "4k3/8/3p4/4N3/8/8/8/4K3 b - - 0 1"; // d6 pawn can take e5
+  const quietKnight = { piece: "n", to: "e5" };
 
-  it("flags a minor piece that can be captured while the mover is still fine", () => {
-    expect(detectSacrifice(knightOnE5, attackedKnightFen, 0)).toBe(true);
+  it("flags a knight left where a pawn can take it", () => {
+    const fen = "4k3/8/3p4/4N3/8/8/8/4K3 b - - 0 1"; // d6 pawn takes e5
+    expect(detectSacrifice(quietKnight, fen)).toMatchObject({ square: "e5", piece: "n" });
   });
 
-  it("does not flag a pawn move, since pawns are too cheap to count", () => {
-    expect(detectSacrifice({ piece: "p", to: "e5" }, attackedKnightFen, 0)).toBe(false);
+  it("still flags it when the knight is defended, since knight-for-pawn loses material", () => {
+    const fen = "4k3/8/3p4/4N3/3P4/8/8/4K3 b - - 0 1"; // dxe5 dxe5: knight for a pawn
+    expect(detectSacrifice(quietKnight, fen)).not.toBe(null);
   });
 
-  it("does not flag a piece that nobody can capture", () => {
-    const safeFen = "4k3/8/8/4N3/8/8/8/4K3 b - - 0 1";
-    expect(detectSacrifice(knightOnE5, safeFen, 0)).toBe(false);
+  it("does not call an even trade a sacrifice", () => {
+    // Black's bishop can take the knight, but d4 recaptures: bishop for knight.
+    const fen = "4k3/2b5/8/4N3/3P4/8/8/4K3 b - - 0 1";
+    expect(detectSacrifice(quietKnight, fen)).toBe(null);
   });
 
-  it("requires the mover's eval to be at least -60 cp (boundary)", () => {
-    expect(detectSacrifice(knightOnE5, attackedKnightFen, -60)).toBe(true);
-    expect(detectSacrifice(knightOnE5, attackedKnightFen, -61)).toBe(false);
+  it("does not flag a piece nobody can capture", () => {
+    const fen = "4k3/8/8/4N3/8/8/8/4K3 b - - 0 1";
+    expect(detectSacrifice(quietKnight, fen)).toBe(null);
   });
 
-  // A test you know will not pass yet. 'todo' records the gap without
-  // turning the whole suite red. This is a real limitation: the function
-  // checks that the piece CAN be captured, but never whether it is
-  // defended, so an even trade could be mislabelled 'brilliant'.
-  it.todo("does not call a defended piece a sacrifice (an even trade is not brilliant)");
+  it("counts what the move captured: Nxe5 winning a knight, then losing it for a pawn, is no sacrifice", () => {
+    const fen = "4k3/8/3p4/4N3/8/8/8/4K3 b - - 0 1";
+    expect(detectSacrifice({ piece: "n", to: "e5", captured: "n" }, fen)).toBe(null);
+  });
+
+  it("ignores pawns, which are too cheap to count", () => {
+    const fen = "4k3/8/3p4/4P3/8/8/8/4K3 b - - 0 1";
+    expect(detectSacrifice({ piece: "p", to: "e5" }, fen)).toBe(null);
+  });
+});
+
+/* ------------------------------------------------------------------ */
+describe("brilliantKind", () => {
+  // Compares the sacrifice (sacEval) with the best non-sacrificing move
+  // (altEval), both from the mover's point of view in centipawns.
+
+  it("calls it brilliant when the sac rescues a losing position", () => {
+    expect(brilliantKind({ cpLoss: 0, altEval: -300, sacEval: 0 })).toBe("equalizes");
+  });
+
+  it("calls it brilliant when the sac turns an even position into a win", () => {
+    expect(brilliantKind({ cpLoss: 0, altEval: 20, sacEval: 350 })).toBe("wins");
+  });
+
+  it("is not brilliant when the mover was already winning anyway", () => {
+    expect(brilliantKind({ cpLoss: 0, altEval: 400, sacEval: 900 })).toBe(null);
+  });
+
+  it("is not brilliant when the sac only helps a little", () => {
+    expect(brilliantKind({ cpLoss: 0, altEval: 0, sacEval: 120 })).toBe(null);
+    expect(brilliantKind({ cpLoss: 0, altEval: -300, sacEval: -150 })).toBe(null);
+  });
+
+  it("is not brilliant when the sac itself was not (near-)best", () => {
+    expect(brilliantKind({ cpLoss: BRILLIANT.MAX_CP_LOSS + 1, altEval: -300, sacEval: 0 })).toBe(null);
+  });
+
+  it("uses inclusive boundaries", () => {
+    expect(brilliantKind({ cpLoss: 0, altEval: BRILLIANT.LOSING, sacEval: BRILLIANT.EQUALIZED })).toBe("equalizes");
+    expect(brilliantKind({ cpLoss: 0, altEval: BRILLIANT.EVEN_HIGH, sacEval: BRILLIANT.WINNING })).toBe("wins");
+    expect(brilliantKind({ cpLoss: 0, altEval: BRILLIANT.EVEN_HIGH + 1, sacEval: 900 })).toBe(null);
+  });
+
+  it("treats a sac that forces mate from an even position as winning", () => {
+    expect(brilliantKind({ cpLoss: 0, altEval: 0, sacEval: 29970 })).toBe("wins");
+  });
 });
 
 /* ------------------------------------------------------------------ */
